@@ -1,0 +1,7 @@
+[functions.omniroute-chat]
+verify_jwt = true
+entrypoint = "./functions/omniroute-chat/index.ts"
+
+[functions.omniroute-models]
+verify_jwt = true
+entrypoint = "./functions/omniroute-models/index.ts"
