@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, User as UserIcon, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { useI18n } from '@/i18n/I18nContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { Logo } from '@/components/Logo';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -48,7 +49,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
         setError(error);
         return;
       }
-      setInfo(t('auth.accountCreated'));
+      navigate(from, { replace: true });
     }
   }
 
@@ -73,6 +74,15 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
             </p>
           </div>
 
+          {!isSupabaseConfigured && (
+            <div className="mb-4 p-3 bg-brand-500/10 border border-brand-500/20 rounded-xl text-xs text-brand-300 flex items-center gap-2">
+              <Sparkles size={16} className="shrink-0 text-brand-400" />
+              <span>
+                <strong>Quick Access:</strong> Enter any email and password to enter the studio.
+              </span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="surface p-6 space-y-4 animate-slide-up">
             {!isSignIn && (
               <div>
@@ -88,7 +98,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="input ps-10"
-                    placeholder="Ada Lovelace"
+                    placeholder="Developer"
                   />
                 </div>
               </div>
@@ -107,7 +117,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input ps-10"
-                  placeholder="you@example.com"
+                  placeholder="admin@tajil.com"
                 />
               </div>
             </div>
