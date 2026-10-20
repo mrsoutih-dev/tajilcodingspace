@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Check, Loader2, Plug, ArrowRight, ArrowLeft, Globe, Cpu } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { useI18n } from '@/i18n/I18nContext';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { omnirouteDefaults } from '@/config/branding';
+import { normalizeOmniRouteUrl, saveOmniRouteConfig } from '@/lib/omniroute';
 import { Logo } from '@/components/Logo';
 
 export function OnboardingPage() {
@@ -14,7 +15,7 @@ export function OnboardingPage() {
 
   const [step, setStep] = useState(0);
   const [baseUrl, setBaseUrl] = useState(omnirouteDefaults.defaultBaseUrl);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState(omnirouteDefaults.defaultApiKey);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; message: string }>(null);
   const [finishing, setFinishing] = useState(false);
@@ -28,7 +29,8 @@ export function OnboardingPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/models`, {
+      const cleanUrl = normalizeOmniRouteUrl(baseUrl);
+      const resp = await fetch(`${cleanUrl}/models`, {
         headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       });
       if (resp.ok) {
@@ -36,10 +38,12 @@ export function OnboardingPage() {
         const count = Array.isArray(data?.data) ? data.data.length : 0;
         setTestResult({ ok: true, message: t('onboarding.connectionOk') + ` (${count} models)` });
       } else {
-        setTestResult({ ok: false, message: t('onboarding.connectionFailed') });
+        const errJson = await resp.json().catch(() => ({}));
+        const msg = errJson?.error?.message || errJson?.error || `HTTP ${resp.status}`;
+        setTestResult({ ok: false, message: `${t('onboarding.connectionFailed')} (${msg})` });
       }
-    } catch {
-      setTestResult({ ok: false, message: t('onboarding.connectionFailed') });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: `${t('onboarding.connectionFailed')}: ${e?.message || e}` });
     } finally {
       setTesting(false);
     }
@@ -48,24 +52,26 @@ export function OnboardingPage() {
   async function finish() {
     setFinishing(true);
     try {
-      // Save OmniRoute config (base URL + default model placeholder)
-      if (user) {
-        await supabase
-          .from('omniroute_config')
-          .upsert(
-            { user_id: user.id, base_url: baseUrl.replace(/\/$/, ''), default_model: '' },
-            { onConflict: 'user_id' }
-          );
+      await saveOmniRouteConfig({
+        base_url: baseUrl,
+        api_key: apiKey,
+        default_model: omnirouteDefaults.defaultModel,
+      });
 
-        await supabase.from('profiles').upsert(
-          {
-            id: user.id,
-            preferred_language: language,
-            onboarded: true,
-            full_name: (user.user_metadata?.full_name as string) ?? '',
-          },
-          { onConflict: 'id' }
-        );
+      if (user && isSupabaseConfigured) {
+        try {
+          await supabase.from('profiles').upsert(
+            {
+              id: user.id,
+              preferred_language: language,
+              onboarded: true,
+              full_name: (user.user_metadata?.full_name as string) ?? '',
+            },
+            { onConflict: 'id' }
+          );
+        } catch {
+          // ignore
+        }
       }
       navigate('/dashboard', { replace: true });
     } finally {

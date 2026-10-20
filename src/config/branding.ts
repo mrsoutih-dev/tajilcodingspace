@@ -32,8 +32,9 @@ export const branding: BrandingConfig = {
 };
 
 export const omnirouteDefaults = {
-  // User-configurable; stored in Supabase after first setup.
-  defaultBaseUrl: 'https://omniroute.zohodigital.com',
+  defaultBaseUrl: 'https://omniroute.tajil.com/v1',
+  defaultApiKey: 'sk-35aba6ba1ce0cb11-ccc9d4-eecf3abc',
+  defaultModel: 'auto/best-free',
   chatPath: '/v1/chat/completions',
   modelsPath: '/v1/models',
 };

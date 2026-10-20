@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cpu, Plug, RefreshCw, Loader2, Check, Star, Save, Globe } from 'lucide-react';
+import { Cpu, Plug, RefreshCw, Loader2, Check, Star, Save, Globe, Key, Eye, EyeOff } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
 import {
@@ -15,6 +15,8 @@ export function ModelsPage() {
   const { t } = useI18n();
 
   const [baseUrl, setBaseUrl] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [defaultModel, setDefaultModel] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,26 +30,47 @@ export function ModelsPage() {
     getOmniRouteConfig()
       .then((c) => {
         if (c) {
-          setBaseUrl(c.base_url);
-          setDefaultModel(c.default_model);
+          setBaseUrl(c.base_url || omnirouteDefaults.defaultBaseUrl);
+          setApiKey(c.api_key || omnirouteDefaults.defaultApiKey);
+          setDefaultModel(c.default_model || omnirouteDefaults.defaultModel);
         } else {
           setBaseUrl(omnirouteDefaults.defaultBaseUrl);
+          setApiKey(omnirouteDefaults.defaultApiKey);
+          setDefaultModel(omnirouteDefaults.defaultModel);
         }
       })
-      .catch(() => setBaseUrl(omnirouteDefaults.defaultBaseUrl))
+      .catch(() => {
+        setBaseUrl(omnirouteDefaults.defaultBaseUrl);
+        setApiKey(omnirouteDefaults.defaultApiKey);
+        setDefaultModel(omnirouteDefaults.defaultModel);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  function extractErrorMessage(e: unknown): string {
+    if (e instanceof Error) return e.message;
+    if (typeof e === 'object' && e !== null) {
+      if ('message' in e) return String((e as any).message);
+      if ('error' in e) return typeof (e as any).error === 'string' ? (e as any).error : JSON.stringify((e as any).error);
+      return JSON.stringify(e);
+    }
+    return String(e);
+  }
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
     try {
-      await saveOmniRouteConfig({ base_url: baseUrl.replace(/\/$/, ''), default_model: defaultModel });
+      await saveOmniRouteConfig({
+        base_url: baseUrl,
+        api_key: apiKey,
+        default_model: defaultModel,
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       pushNotification({ title: t('models.title'), body: t('models.saved'), level: 'success' });
     } catch (e) {
-      setTestResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
+      setTestResult({ ok: false, message: extractErrorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -57,13 +80,16 @@ export function ModelsPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      // Save first so the edge function sees the new base URL
-      await saveOmniRouteConfig({ base_url: baseUrl.replace(/\/$/, ''), default_model: defaultModel });
-      const list = await fetchAvailableModels();
+      await saveOmniRouteConfig({
+        base_url: baseUrl,
+        api_key: apiKey,
+        default_model: defaultModel,
+      });
+      const list = await fetchAvailableModels(baseUrl, apiKey);
       setModels(list);
       setTestResult({ ok: true, message: t('models.testOk', { count: list.length }) });
     } catch (e) {
-      setTestResult({ ok: false, message: t('models.testFailed', { error: e instanceof Error ? e.message : String(e) }) });
+      setTestResult({ ok: false, message: t('models.testFailed', { error: extractErrorMessage(e) }) });
     } finally {
       setTesting(false);
     }
@@ -72,7 +98,7 @@ export function ModelsPage() {
   async function refreshModels() {
     setRefreshing(true);
     try {
-      setModels(await fetchAvailableModels());
+      setModels(await fetchAvailableModels(baseUrl, apiKey));
     } catch {
       setModels([]);
     } finally {
@@ -111,9 +137,36 @@ export function ModelsPage() {
                 type="url"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
-                className="input"
+                className="input font-mono text-xs"
                 placeholder={omnirouteDefaults.defaultBaseUrl}
               />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="label" htmlFor="mapikey">
+                  {t('models.apiKey')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="text-ink-500 hover:text-ink-200 text-xs flex items-center gap-1 mb-1"
+                >
+                  {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                  {showKey ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div className="relative">
+                <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
+                <input
+                  id="mapikey"
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="input font-mono text-xs pl-8"
+                  placeholder="sk-..."
+                />
+              </div>
             </div>
 
             <div>
@@ -126,7 +179,7 @@ export function ModelsPage() {
                 value={defaultModel}
                 onChange={(e) => setDefaultModel(e.target.value)}
                 className="input font-mono text-xs"
-                placeholder="e.g. gpt-4o, claude-sonnet, llama3"
+                placeholder="e.g. auto/best-free"
               />
             </div>
 
@@ -174,7 +227,7 @@ export function ModelsPage() {
           {models.length === 0 ? (
             <EmptyState icon={Cpu} title={t('models.noModels')} description={t('models.test')} />
           ) : (
-            <div className="space-y-1 overflow-y-auto max-h-[380px]">
+            <div className="space-y-1 overflow-y-auto max-h-[460px]">
               {models.map((m) => (
                 <button
                   key={m.id}
